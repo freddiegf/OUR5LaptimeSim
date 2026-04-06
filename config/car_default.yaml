@@ -1,0 +1,71 @@
+# ============================================================
+# Formula Student Car Parameters - OUR5
+# ============================================================
+# All SI units unless stated otherwise.
+# cog_x: longitudinal CoG distance from FRONT axle, m
+# cop_x: Centre of Pressure distance from FRONT axle, m
+# Positive radius in track YAMLs = left-hand turn.
+
+# --- Vehicle inertia & geometry ---
+mass: 280.0          # kg, total including driver
+cog_x: 0.85          # m from front axle (wheelbase × rear weight fraction)
+cog_y: 0.00          # m from centreline (assume symmetric)
+cog_z: 0.28          # m height above ground
+wheelbase: 1.55      # m
+front_track: 1.22    # m (tyre centreline to centreline)
+rear_track:  1.18    # m
+
+# --- Front tyre ---
+front_tyre:
+  mu_x_nominal: 1.65          # peak longitudinal friction at Fz_nominal
+  mu_y_nominal: 1.70          # peak lateral friction at Fz_nominal
+  mu_x_load_sensitivity: -0.00012   # d(mu_x)/dFz [1/N] — degrades with load
+  mu_y_load_sensitivity: -0.00012
+  radius: 0.2032              # rolling radius, m  (8-inch Hoosier R25B)
+  Fz_nominal: 700.0           # N — reference normal load for mu calibration
+
+# --- Rear tyre ---
+rear_tyre:
+  mu_x_nominal: 1.65
+  mu_y_nominal: 1.70
+  mu_x_load_sensitivity: -0.00012
+  mu_y_load_sensitivity: -0.00012
+  radius: 0.2032
+  Fz_nominal: 700.0
+
+# --- Aerodynamics ---
+aero:
+  Cl: -2.8             # lift coefficient (negative = downforce)
+  Cd:  1.4             # drag coefficient
+  area: 1.0            # reference area, m^2
+  cop_x: 0.70          # Centre of Pressure from front axle, m
+  rho_air: 1.225       # kg/m^3
+
+# --- Powertrain ---
+powertrain:
+  # Motor torque curve: list of [rpm, torque_Nm] pairs
+  # Peak torque is flat to base speed, then falls hyperbolically
+  torque_curve:
+    - [0,     230]
+    - [1000,  230]
+    - [4000,  230]
+    - [6000,  200]
+    - [8000,  160]
+    - [10000, 100]
+    - [11000,  40]
+  gear_ratio: 11.5             # overall ratio (gearbox × final drive)
+  drivetrain_efficiency: 0.90  # mechanical efficiency (belt/chain losses)
+  drivetrain_type: RWD         # RWD | FWD | AWD
+  awd_front_bias: 0.50         # fraction of torque to front (AWD only)
+
+# --- Battery ---
+battery:
+  capacity_kWh: 7.2
+  nominal_voltage: 400.0         # V_oc at SOC=1.0 (fully charged), V
+  internal_resistance: 0.08      # total pack resistance, Ohm
+  # Thermal model: lumped mass, Ohmic heating only (no cooling)
+  # pack_thermal_mass = m_pack * Cp_cells
+  # e.g. 6 kg * 1100 J/(kg·K) ≈ 6600 J/K
+  pack_thermal_mass: 6600.0      # J/K
+  initial_temperature: 25.0      # degrees C
+  initial_SOC: 1.0               # 0–1

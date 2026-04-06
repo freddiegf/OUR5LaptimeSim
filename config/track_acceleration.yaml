@@ -1,0 +1,8 @@
+# ============================================================
+# FS Acceleration Event Track
+# ============================================================
+# Straight 75 m dash from rest.
+# No corners — pure longitudinal performance.
+
+segments:
+  - {type: straight, length: 75.0}
