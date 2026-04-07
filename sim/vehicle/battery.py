@@ -1,22 +1,32 @@
 """
 battery.py
 ==========
-Lumped electrical + thermal battery model.
+Per-cell electrical + lumped thermal battery model.
 
-Electrical model
-----------------
-  V_oc(SOC) = V_nominal × SOC   (linear OCV curve)
+Cells: Molicel P42A 21700 (or any cell configured in the YAML).
+Pack: n_series cells in series, n_parallel strings in parallel.
 
-  Power balance: P = V_oc × I - I² × R_int
-  Solving for current I (quadratic formula, lower root chosen):
-      R_int × I² - V_oc × I + P = 0
-      I = (V_oc - sqrt(V_oc² - 4×R_int×P)) / (2×R_int)
+Electrical model (pack level)
+------------------------------
+  V_oc(SOC) = n_series × V_cell(SOC)
+  where V_cell(SOC) is interpolated from a realistic OCV lookup table.
+
+  Quadratic current solve (P = terminal power = V_terminal × I):
+    R_pack × I² - V_oc × I + P_demand = 0
+    I = (V_oc - sqrt(V_oc² - 4·R_pack·P)) / (2·R_pack)
+    lower root → normal operating regime
+
+  Cell current = I_pack / n_parallel
 
 Thermal model (Ohmic heating, no cooling)
 ------------------------------------------
-  Q_heat = I² × R_int   (W)
-  dT/dt  = Q_heat / pack_thermal_mass
-  T_new  = T + Q_heat × dt / pack_thermal_mass
+  Heat generated per cell = (I_cell)² × R_cell
+  Total heat = n_cells × (I_pack/n_parallel)² × R_cell
+             = I_pack² × n_series × R_cell / n_parallel
+             = I_pack² × R_pack
+
+  dT/dt = Q_heat_total / (n_cells × m_cell × Cp)
+        = I_pack² × R_pack / pack_thermal_mass
 """
 
 from __future__ import annotations
@@ -29,14 +39,20 @@ import numpy as np
 from sim.vehicle.car_params import BatteryParams
 
 
+# Molicel P42A 21700 — per-cell OCV vs SOC lookup table
+_CELL_OCV_SOC = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+_CELL_OCV_V   = [2.5, 3.2, 3.6, 3.8, 3.95, 4.2]
+
+
 @dataclass
 class BatteryState:
-    SOC: float           # 0–1
-    temperature: float   # °C
-    voltage_oc: float    # V
-    current: float       # A (this step)
-    power_loss: float    # W (heat generated)
-    energy_used_J: float # J consumed this step
+    SOC: float              # 0–1
+    temperature: float      # °C (cell/pack temperature, lumped)
+    voltage_oc: float       # pack OCV, V
+    current_pack: float     # pack current, A
+    current_cell: float     # per-cell current, A
+    power_loss: float       # Ohmic heat rate, W
+    energy_used_J: float    # energy drawn this step, J
 
 
 class BatteryModel:
@@ -46,17 +62,19 @@ class BatteryModel:
 
     def reset(self) -> None:
         """Restore battery to initial conditions."""
-        self.SOC = self.p.initial_SOC
+        self.SOC         = self.p.initial_SOC
         self.temperature = self.p.initial_temperature
-        self._capacity_J = self.p.capacity_kWh * 3.6e6
+        self._capacity_J = self.p.pack_capacity_kWh * 3.6e6
 
     # ------------------------------------------------------------------
     # OCV model
     # ------------------------------------------------------------------
 
     def V_oc(self, SOC: float) -> float:
-        """Open-circuit voltage (V) as a linear function of SOC."""
-        return self.p.nominal_voltage * max(0.0, SOC)
+        """Pack open-circuit voltage (V) from per-cell OCV lookup table."""
+        SOC_clamped = max(0.0, min(1.0, SOC))
+        cell_V = float(np.interp(SOC_clamped, _CELL_OCV_SOC, _CELL_OCV_V))
+        return cell_V * self.p.n_series
 
     # ------------------------------------------------------------------
     # Current solver
@@ -64,26 +82,21 @@ class BatteryModel:
 
     def solve_current(self, P_demand: float) -> tuple[float, bool]:
         """
-        Solve for battery current given power demand P_demand (W).
+        Solve for pack current given mechanical power demand P_demand (W).
 
-        Quadratic: R×I² - V_oc×I + P = 0
-        Takes the lower root (physically correct for normal operation).
-
-        Returns (I, feasible). feasible=False means P_demand exceeds the
-        maximum power the pack can deliver; current is clamped in that case.
+        Quadratic: R_pack×I² - V_oc×I + P = 0
+        Returns (I_pack, feasible).
+        feasible=False if demand exceeds maximum deliverable power.
         """
         if P_demand <= 0.0:
-            # Regeneration or idle — simplified: treat as zero current
             return 0.0, True
 
         V = self.V_oc(self.SOC)
-        R = self.p.internal_resistance
+        R = self.p.pack_R_int
         discriminant = V ** 2 - 4.0 * R * P_demand
 
         if discriminant < 0.0:
-            # Demand exceeds maximum deliverable power — clamp to peak current
-            I_peak = V / (2.0 * R)
-            return I_peak, False
+            return V / (2.0 * R), False   # clamped to peak current
 
         I = (V - math.sqrt(discriminant)) / (2.0 * R)
         return I, True
@@ -95,14 +108,13 @@ class BatteryModel:
     def step(self, P_demand: float, dt: float) -> BatteryState:
         """
         Advance battery state by dt seconds under power demand P_demand (W).
-
-        Updates SOC and temperature in-place; returns a BatteryState snapshot.
+        Updates SOC and temperature in-place.
         """
-        I, feasible = self.solve_current(P_demand)
-        R = self.p.internal_resistance
+        I_pack, _feasible = self.solve_current(P_demand)
+        R = self.p.pack_R_int
 
-        Q_heat      = I ** 2 * R * dt               # J — Ohmic heating
-        energy_used = self.V_oc(self.SOC) * I * dt  # J — energy drawn from pack
+        Q_heat      = I_pack ** 2 * R * dt              # J — total Ohmic heat
+        energy_used = self.V_oc(self.SOC) * I_pack * dt  # J — energy from pack
 
         self.SOC = max(0.0, self.SOC - energy_used / self._capacity_J)
         self.temperature += Q_heat / self.p.pack_thermal_mass
@@ -111,7 +123,8 @@ class BatteryModel:
             SOC=self.SOC,
             temperature=self.temperature,
             voltage_oc=self.V_oc(self.SOC),
-            current=I,
+            current_pack=I_pack,
+            current_cell=I_pack / self.p.n_parallel,
             power_loss=Q_heat / dt if dt > 0 else 0.0,
             energy_used_J=energy_used,
         )
@@ -121,7 +134,20 @@ class BatteryModel:
     # ------------------------------------------------------------------
 
     def energy_remaining_kWh(self) -> float:
-        return self.SOC * self.p.capacity_kWh
+        return self.SOC * self.p.pack_capacity_kWh
+
+    def max_power(self) -> float:
+        """
+        Maximum deliverable electrical power at current SOC, in Watts.
+
+        Derived from the matched-load condition on the battery's equivalent
+        circuit: P_max = V_oc² / (4 × R_pack).
+        """
+        V = self.V_oc(self.SOC)
+        R = self.p.pack_R_int
+        if R <= 0.0:
+            return float("inf")
+        return V ** 2 / (4.0 * R)
 
     def energy_used_kWh(self) -> float:
-        return (self.p.initial_SOC - self.SOC) * self.p.capacity_kWh
+        return (self.p.initial_SOC - self.SOC) * self.p.pack_capacity_kWh

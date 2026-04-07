@@ -42,16 +42,49 @@ class PowertrainParams:
     drivetrain_efficiency: float
     drivetrain_type: str          # "RWD" | "FWD" | "AWD"
     awd_front_bias: float = 0.5  # fraction of torque to front (AWD only)
+    power_limit_kW: float = 80.0  # system power limit (e.g. FS rules), kW
 
 
 @dataclass
 class BatteryParams:
-    capacity_kWh: float
-    nominal_voltage: float        # V_oc at SOC=1.0, V
-    internal_resistance: float    # total pack resistance, Ω
-    pack_thermal_mass: float      # effective J/K  (m_pack × Cp)
-    initial_temperature: float    # °C
+    """
+    Per-cell battery parameters (e.g. Molicel P42A 21700).
+    Pack quantities (voltage, resistance, capacity, thermal mass) are derived
+    from the cell parameters and the series/parallel configuration.
+    """
+    # Cell electrical
+    cell_capacity_Ah: float       # Ah per cell
+    cell_V_nominal: float         # open-circuit voltage at SOC=1 per cell, V
+    cell_R_int_Ohm: float         # DC internal resistance per cell, Ω
+    # Cell thermal
+    cell_mass_kg: float           # mass per cell, kg
+    cell_Cp_J_per_kgK: float      # specific heat per cell, J/(kg·K)
+    # Pack configuration
+    n_series: int                 # number of cells in series
+    n_parallel: int               # number of parallel strings
+    # Initial conditions
+    initial_temperature: float    # °C (uniform cell temperature)
     initial_SOC: float = 1.0
+
+    # --- Derived pack quantities (computed in __post_init__) ---
+    pack_V_nominal: float = field(init=False)        # V
+    pack_R_int: float = field(init=False)            # Ω
+    pack_capacity_kWh: float = field(init=False)     # kWh
+    pack_thermal_mass: float = field(init=False)     # J/K (all cells)
+    n_cells_total: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.n_cells_total    = self.n_series * self.n_parallel
+        self.pack_V_nominal   = self.n_series * self.cell_V_nominal
+        # Series stack R_cell/n_parallel in each series layer, times n_series layers
+        self.pack_R_int       = self.n_series * self.cell_R_int_Ohm / self.n_parallel
+        # Total capacity in kWh: pack_Ah × pack_V gives Wh, ÷ 1000 → kWh
+        pack_Ah               = self.cell_capacity_Ah * self.n_parallel
+        self.pack_capacity_kWh = (pack_Ah * self.pack_V_nominal) / 1000.0
+        # Thermal: all cells lumped together
+        self.pack_thermal_mass = (self.n_cells_total
+                                  * self.cell_mass_kg
+                                  * self.cell_Cp_J_per_kgK)
 
 
 # ---------------------------------------------------------------------------
@@ -113,16 +146,20 @@ def load_car_params(yaml_path: str) -> CarParams:
         drivetrain_efficiency=pt_raw["drivetrain_efficiency"],
         drivetrain_type=pt_raw["drivetrain_type"],
         awd_front_bias=pt_raw.get("awd_front_bias", 0.5),
+        power_limit_kW=pt_raw.get("power_limit_kW", 80.0),
     )
 
     bat_raw = raw["battery"]
     battery = BatteryParams(
-        capacity_kWh=bat_raw["capacity_kWh"],
-        nominal_voltage=bat_raw["nominal_voltage"],
-        internal_resistance=bat_raw["internal_resistance"],
-        pack_thermal_mass=bat_raw["pack_thermal_mass"],
-        initial_temperature=bat_raw["initial_temperature"],
-        initial_SOC=bat_raw.get("initial_SOC", 1.0),
+        cell_capacity_Ah    = bat_raw["cell_capacity_Ah"],
+        cell_V_nominal      = bat_raw["cell_V_nominal"],
+        cell_R_int_Ohm      = bat_raw["cell_R_int_Ohm"],
+        cell_mass_kg        = bat_raw["cell_mass_kg"],
+        cell_Cp_J_per_kgK   = bat_raw["cell_Cp_J_per_kgK"],
+        n_series            = int(bat_raw["n_series"]),
+        n_parallel          = int(bat_raw["n_parallel"]),
+        initial_temperature = bat_raw["initial_temperature"],
+        initial_SOC         = bat_raw.get("initial_SOC", 1.0),
     )
 
     return CarParams(

@@ -1,74 +1,116 @@
 # ============================================================
-# FS Sprint / Endurance Track
+# FS Sprint / Endurance Track  — ~910 m per lap
 # ============================================================
-# Representative Formula Student autocross layout, ~1050 m per lap.
-# Inspired by FS Germany / FS UK typical layouts.
+# Realistic FS autocross layout with dense direction changes,
+# two hairpins, three chicanes, two slalom sections, and varied
+# sweepers. Max straight 55 m. 26 corner segments.
 #
-# Positive radius = left-hand turn (CCW)
-# Negative radius = right-hand turn (CW)
-# Length is arc length in metres.
+# Heading analysis (net = -360° = closed clockwise loop):
+#   T1:       -90°       Cumulative:  -90°
+#   Chicane1: -45°+45°   Cumulative:  -90°   (net 0°)
+#   T3:       +60°       Cumulative:  -30°
+#   HP1:      -180°      Cumulative: -210°
+#   Slalom1:  (+45-45)×2 Cumulative: -210°   (net 0°)
+#   T4:       +90°       Cumulative: -120°
+#   T5:       -90°       Cumulative: -210°
+#   Chicane2: +45°-45°   Cumulative: -210°   (net 0°)
+#   Slalom2:  (-30+30)×2 Cumulative: -210°   (net 0°)
+#   T7:       +60°       Cumulative: -150°
+#   HP2:      -180°      Cumulative: -330°
+#   Chicane3: -30°+30°   Cumulative: -330°   (net 0°)
+#   T8:       +90°       Cumulative: -240°
+#   T9:       -90°       Cumulative: -330°
+#   T10:      -30°       Cumulative: -360° ✓
 #
-# Segment breakdown:
-#   3 hairpins (r=4.5–5 m, 180 deg)
-#   2 sweepers (r=12–15 m)
-#   1 right-left chicane
-#   1 slalom section (5 alternating 60 deg corners)
-#   1 long oval sweeper (r=12, 300 deg)
-#   Connecting straights
+# Positive radius = left-hand (CCW); negative = right-hand (CW).
+# All lengths are arc-lengths in metres.
+# ============================================================
 
 segments:
-  # --- Start/finish straight ---
-  - {type: straight,  length: 80.0}
+  # ====== S/F STRAIGHT ======
+  - {type: straight,  length: 55.0}
 
-  # --- Hairpin 1 (right, tight) ---
-  - {type: corner,    radius:  -5.0,  length: 15.71}   # 180 deg
+  # T1 — medium right 90°, r=15 m
+  - {type: corner,    radius: -15.0, length: 23.56}
 
   - {type: straight,  length: 30.0}
 
-  # --- Left sweeper (120 deg) ---
-  - {type: corner,    radius:  15.0,  length: 31.42}
+  # Chicane 1 — right 45° then left 45°, r=9 m
+  - {type: corner,    radius:  -9.0, length:  7.07}
+  - {type: corner,    radius:   9.0, length:  7.07}
+
+  - {type: straight,  length: 40.0}
+
+  # T3 — left sweeper 60°, r=20 m
+  - {type: corner,    radius:  20.0, length: 20.94}
+
+  - {type: straight,  length: 30.0}
+
+  # HP1 — tight right hairpin 180°, r=5 m
+  - {type: corner,    radius:  -5.0, length: 15.71}
 
   - {type: straight,  length: 25.0}
 
-  # --- Right-left chicane ---
-  - {type: corner,    radius:  -8.0,  length: 16.76}   # 120 deg right
-  - {type: straight,  length:   5.0}
-  - {type: corner,    radius:   8.0,  length: 16.76}   # 120 deg left
-
-  - {type: straight,  length: 40.0}
-
-  # --- Hairpin 2 (right, very tight) ---
-  - {type: corner,    radius:  -4.5,  length: 14.14}   # 180 deg
+  # Slalom 1 — 4 × 45° alternating, r=9 m
+  - {type: corner,    radius:   9.0, length:  7.07}
+  - {type: corner,    radius:  -9.0, length:  7.07}
+  - {type: corner,    radius:   9.0, length:  7.07}
+  - {type: corner,    radius:  -9.0, length:  7.07}
 
   - {type: straight,  length: 35.0}
 
-  # --- Slalom: 5 alternating 60 deg corners ---
-  - {type: corner,    radius:   9.0,  length:  9.42}   # left
-  - {type: corner,    radius:  -9.0,  length:  9.42}   # right
-  - {type: corner,    radius:   9.0,  length:  9.42}   # left
-  - {type: corner,    radius:  -9.0,  length:  9.42}   # right
-  - {type: corner,    radius:   9.0,  length:  9.42}   # left
+  # T4 — fast left sweeper 90°, r=30 m
+  - {type: corner,    radius:  30.0, length: 47.12}
 
-  - {type: straight,  length: 50.0}
+  - {type: straight,  length: 45.0}
 
-  # --- Long oval sweeper (300 deg right) ---
-  - {type: corner,    radius: -12.0,  length: 62.83}
+  # T5 — tight right 90°, r=8 m
+  - {type: corner,    radius:  -8.0, length: 12.57}
 
-  - {type: straight,  length: 20.0}
+  - {type: straight,  length: 25.0}
 
-  # --- Hairpin 3 (left) ---
-  - {type: corner,    radius:   5.0,  length: 15.71}   # 180 deg
+  # Chicane 2 — left 45° then right 45°, r=10 m
+  - {type: corner,    radius:  10.0, length:  7.85}
+  - {type: corner,    radius: -10.0, length:  7.85}
+
+  - {type: straight,  length: 30.0}
+
+  # Slalom 2 — 4 × 30° alternating, r=12 m
+  - {type: corner,    radius: -12.0, length:  6.28}
+  - {type: corner,    radius:  12.0, length:  6.28}
+  - {type: corner,    radius: -12.0, length:  6.28}
+  - {type: corner,    radius:  12.0, length:  6.28}
 
   - {type: straight,  length: 35.0}
 
-  # --- Right-left chicane 2 ---
-  - {type: corner,    radius:  -7.0,  length: 11.00}   # 90 deg right
-  - {type: corner,    radius:   7.0,  length: 11.00}   # 90 deg left
+  # T7 — left 60°, r=25 m
+  - {type: corner,    radius:  25.0, length: 26.18}
 
-  # --- Final straight back to S/F ---
-  - {type: straight,  length: 60.0}
+  - {type: straight,  length: 25.0}
 
-  # --- Closing hairpin (right) ---
-  - {type: corner,    radius:  -5.0,  length: 15.71}   # 180 deg
+  # HP2 — tight right hairpin 180°, r=5 m
+  - {type: corner,    radius:  -5.0, length: 15.71}
 
-  - {type: straight,  length: 40.0}
+  - {type: straight,  length: 25.0}
+
+  # Chicane 3 — right 30° then left 30°, r=12 m
+  - {type: corner,    radius: -12.0, length:  6.28}
+  - {type: corner,    radius:  12.0, length:  6.28}
+
+  - {type: straight,  length: 35.0}
+
+  # T8 — fast left sweeper 90°, r=35 m
+  - {type: corner,    radius:  35.0, length: 54.98}
+
+  - {type: straight,  length: 45.0}
+
+  # T9 — right 90°, r=10 m
+  - {type: corner,    radius: -10.0, length: 15.71}
+
+  - {type: straight,  length: 30.0}
+
+  # T10 — right 30°, r=15 m (exit onto S/F straight)
+  - {type: corner,    radius: -15.0, length:  7.85}
+
+  # ====== BACK → S/F ======
+  - {type: straight,  length: 45.0}

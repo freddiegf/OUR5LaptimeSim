@@ -5,13 +5,14 @@ Quasi-static forward-backward velocity profile solver.
 
 Algorithm
 ---------
-1. Forward pass  — starting from v_initial, accelerate as hard as the GGV
-                   allows at each arc-length station.
-2. Backward pass — starting from v_final, "brake" as hard as the GGV allows
-                   going backwards along the track.
-3. Combine       — take the element-wise minimum of the two profiles, then
-                   enforce the curvature-derived cornering speed limit.
-4. Build states  — walk the final speed profile and populate a VehicleState
+1. Corner caps   — pre-compute max cornering speed at each station via
+                   binary search on the GGV lateral limit.
+2. Forward pass  — starting from v_initial, accelerate as hard as the GGV
+                   allows, clamped to corner speed caps at every station.
+3. Backward pass — starting from v_final, "brake" as hard as the GGV allows
+                   going backwards, clamped to corner speed caps.
+4. Combine       — take the element-wise minimum of the two profiles.
+5. Build states  — walk the final speed profile and populate a VehicleState
                    at every station (forces, battery, timing).
 
 The solver is deliberately separated from the event logic. Events control
@@ -70,6 +71,7 @@ class LapSolver:
         enable_battery: bool = True,
         t_start: float = 0.0,
         s_offset: float = 0.0,
+        power_limit_W: float | None = None,
     ) -> List[VehicleState]:
         """
         Run the forward-backward solver on the given track.
@@ -83,34 +85,51 @@ class LapSolver:
                          still logged as current values)
         t_start        : time offset for the returned states (for multi-lap runs)
         s_offset       : arc-length offset for returned states
+        power_limit_W  : if given, overrides the powertrain power_limit_kW for
+                         this solve (used to enforce battery deliverable power)
 
         Returns
         -------
         List[VehicleState] — one entry per arc-length station
         """
-        v_fwd = self._forward_pass(track, v_initial)
-        v_bwd = self._backward_pass(track, v_final)
-        v     = self._combine(track, v_fwd, v_bwd)
-        return self._build_states(track, v, enable_battery, t_start, s_offset)
+        v_cap = self._corner_speed_caps(track)
+        v_fwd = self._forward_pass(track, v_initial, v_cap, power_limit_W)
+        v_bwd = self._backward_pass(track, v_final, v_cap)
+        v     = self._combine(v_fwd, v_bwd)
+        return self._build_states(track, v, enable_battery, t_start, s_offset,
+                                  power_limit_W)
 
     # ------------------------------------------------------------------
     # Forward pass
     # ------------------------------------------------------------------
 
-    def _forward_pass(self, track: TrackProfile, v_initial: float) -> np.ndarray:
+    def _forward_pass(
+        self, track: TrackProfile, v_initial: float, v_cap: np.ndarray,
+        power_limit_W: float | None = None,
+    ) -> np.ndarray:
         N  = len(track.s)
         ds = track.ds
         v  = np.zeros(N)
-        v[0] = max(v_initial, 0.0)
+        v[0] = min(max(v_initial, 0.0), v_cap[0])
 
         for i in range(N - 1):
             vi  = max(v[i], _MIN_SPEED)
             ay  = float(np.clip(vi ** 2 * track.kappa[i],
                                 -self.ggv.ay_abs_max, self.ggv.ay_abs_max))
             ax  = self.ggv.query_ax_max(vi, ay)
-            ax  = max(0.0, ax)   # forward pass: only accelerate
-            v_next_sq = vi ** 2 + 2.0 * ax * ds
-            v[i + 1] = max(0.0, v_next_sq) ** 0.5
+
+            # If a power limit is supplied (e.g. battery max power), cap ax.
+            # power_limit_W is terminal power; multiply by η to get wheel force.
+            if power_limit_W is not None:
+                eta  = self.pt.p.drivetrain_efficiency
+                drag = self.aero.drag_force(vi)
+                F_power = power_limit_W * eta / vi
+                ax_power = (F_power - drag) / self.car.mass
+                ax = min(ax, ax_power)
+
+            # Use v[i] (actual speed) in kinematics; vi is only for GGV lookup.
+            v_next_sq = v[i] ** 2 + 2.0 * ax * ds
+            v[i + 1] = min(max(0.0, v_next_sq) ** 0.5, v_cap[i + 1])
 
         return v
 
@@ -118,11 +137,13 @@ class LapSolver:
     # Backward pass
     # ------------------------------------------------------------------
 
-    def _backward_pass(self, track: TrackProfile, v_final: float) -> np.ndarray:
+    def _backward_pass(
+        self, track: TrackProfile, v_final: float, v_cap: np.ndarray,
+    ) -> np.ndarray:
         N  = len(track.s)
         ds = track.ds
         v  = np.zeros(N)
-        v[-1] = max(v_final, 0.0)
+        v[-1] = min(max(v_final, 0.0), v_cap[-1])
 
         for i in range(N - 1, 0, -1):
             vi  = max(v[i], _MIN_SPEED)
@@ -130,31 +151,55 @@ class LapSolver:
                                 -self.ggv.ay_abs_max, self.ggv.ay_abs_max))
             ax_min   = self.ggv.query_ax_min(vi, ay)   # negative
             ax_brake = abs(ax_min)
-            v_prev_sq = vi ** 2 + 2.0 * ax_brake * ds
-            v[i - 1] = max(0.0, v_prev_sq) ** 0.5
+            # Use v[i] (actual speed) in kinematics; vi is only for GGV lookup.
+            v_prev_sq = v[i] ** 2 + 2.0 * ax_brake * ds
+            v[i - 1] = min(max(0.0, v_prev_sq) ** 0.5, v_cap[i - 1])
 
         return v
 
     # ------------------------------------------------------------------
-    # Combine and apply cornering cap
+    # Corner speed caps
+    # ------------------------------------------------------------------
+
+    def _corner_speed_caps(self, track: TrackProfile) -> np.ndarray:
+        """
+        Pre-compute maximum cornering speed at each station.
+
+        Uses binary search on the GGV to find the speed at which the
+        required lateral acceleration v²×|kappa| just saturates the
+        tyre lateral limit (ax_max drops to zero).
+
+        Returns np.inf at straight stations (no cap).
+        """
+        N = len(track.s)
+        v_cap = np.full(N, np.inf)
+        for i, kap in enumerate(track.kappa):
+            if abs(kap) > 1e-6:
+                v_hi = (self.ggv.ay_abs_max / abs(kap)) ** 0.5
+                v_lo = 0.0
+                for _ in range(20):
+                    v_mid = 0.5 * (v_lo + v_hi)
+                    ay_req = v_mid ** 2 * abs(kap)
+                    ax_at_ay = self.ggv.query_ax_max(
+                        max(v_mid, _MIN_SPEED), ay_req)
+                    if ax_at_ay > 0.0:
+                        v_lo = v_mid
+                    else:
+                        v_hi = v_mid
+                v_cap[i] = v_hi
+        return v_cap
+
+    # ------------------------------------------------------------------
+    # Combine forward and backward profiles
     # ------------------------------------------------------------------
 
     def _combine(
         self,
-        track: TrackProfile,
         v_fwd: np.ndarray,
         v_bwd: np.ndarray,
     ) -> np.ndarray:
-        v = np.minimum(v_fwd, v_bwd)
-
-        # Hard cornering cap: v ≤ sqrt(ay_max / |kappa|)
-        ay_max = self.ggv.ay_abs_max
-        for i, kap in enumerate(track.kappa):
-            if abs(kap) > 1e-6:
-                v_corner = (ay_max / abs(kap)) ** 0.5
-                v[i] = min(v[i], v_corner)
-
-        return np.maximum(v, 0.0)
+        """Element-wise minimum of forward and backward profiles."""
+        return np.maximum(np.minimum(v_fwd, v_bwd), 0.0)
 
     # ------------------------------------------------------------------
     # Build full VehicleState list
@@ -167,11 +212,15 @@ class LapSolver:
         enable_battery: bool,
         t_start: float,
         s_offset: float,
+        power_limit_W: float | None = None,
     ) -> List[VehicleState]:
         N  = len(track.s)
         ds = track.ds
         states: List[VehicleState] = []
         t = t_start
+
+        eta = self.pt.p.drivetrain_efficiency
+        rules_power_W = self.pt.p.power_limit_kW * 1000.0
 
         front_frac, rear_frac = self.pt.driven_axle_fractions()
         r_rear   = self.car.rear_tyre.radius
@@ -231,42 +280,73 @@ class LapSolver:
             Fx_avail_RL = self.ggv.tyre_r.Fx_available(Fz_RL, abs(Fy_RL))
             Fx_avail_RR = self.ggv.tyre_r.Fx_available(Fz_RR, abs(Fy_RR))
 
-            if ax_i >= 0.0:
-                # Accelerating: driven wheels only
-                F_drive_tyre = (front_frac * (Fx_avail_FL + Fx_avail_FR)
-                                + rear_frac  * (Fx_avail_RL + Fx_avail_RR))
-                F_motor = self.pt.max_drive_force(vi, r_driven)
-                drive_force = min(F_drive_tyre, F_motor)
-                brake_force = 0.0
-                # Distribute Fx proportionally to driven axle
-                Fx_FL = front_frac * min(Fx_avail_FL, drive_force / max(1e-3, front_frac * 2 + rear_frac * 2))
-                Fx_FR = Fx_FL
-                Fx_RL = rear_frac  * min(Fx_avail_RL, drive_force / max(1e-3, front_frac * 2 + rear_frac * 2))
-                Fx_RR = Fx_RL
-            else:
-                # Braking: all four wheels
-                brake_force = Fx_avail_FL + Fx_avail_FR + Fx_avail_RL + Fx_avail_RR
-                drive_force = 0.0
-                Fx_FL = -Fx_avail_FL
-                Fx_FR = -Fx_avail_FR
-                Fx_RL = -Fx_avail_RL
-                Fx_RR = -Fx_avail_RR
-
             # --- Aero ---
             df = self.aero.downforce(vi)
             drag = self.aero.drag_force(vi)
+
+            # --- Drive / brake forces from Newton's second law ---
+            # F_net = m*ax = drive_force - drag  (accel)
+            #       = m*ax = -brake_force - drag (braking)
+            F_net_plus_drag = self.car.mass * ax_i + drag
+            if F_net_plus_drag >= 0.0:
+                # Throttle regime (including coasting where drag > decel demand)
+                drive_force = F_net_plus_drag
+                brake_force = 0.0
+                # Distribute Fx to driven wheels proportional to capacity
+                Fx_driven_max = (front_frac * (Fx_avail_FL + Fx_avail_FR)
+                                 + rear_frac * (Fx_avail_RL + Fx_avail_RR))
+                scale = drive_force / max(1e-6, Fx_driven_max)
+                scale = min(scale, 1.0)
+                Fx_FL = front_frac * Fx_avail_FL * scale
+                Fx_FR = front_frac * Fx_avail_FR * scale
+                Fx_RL = rear_frac  * Fx_avail_RL * scale
+                Fx_RR = rear_frac  * Fx_avail_RR * scale
+            else:
+                # Braking regime
+                drive_force = 0.0
+                brake_force = -F_net_plus_drag
+                Fx_brake_max = Fx_avail_FL + Fx_avail_FR + Fx_avail_RL + Fx_avail_RR
+                scale = brake_force / max(1e-6, Fx_brake_max)
+                scale = min(scale, 1.0)
+                Fx_FL = -Fx_avail_FL * scale
+                Fx_FR = -Fx_avail_FR * scale
+                Fx_RL = -Fx_avail_RL * scale
+                Fx_RR = -Fx_avail_RR * scale
 
             # --- Motor state ---
             rpm = self.pt.wheel_speed_to_motor_rpm(vi, r_driven)
             torque = self.pt.motor_torque_at_rpm(rpm)
 
+            # --- Limiting factor (acceleration regime only) ---
+            if brake_force > 1.0:
+                limiting_factor = "Braking"
+            else:
+                # Compute each force limit at the wheel level
+                F_tyre_lim    = (front_frac * (Fx_avail_FL + Fx_avail_FR)
+                                 + rear_frac * (Fx_avail_RL + Fx_avail_RR))
+                F_motor_lim   = self.pt.max_drive_force(vi, r_driven)
+                F_rules_lim   = rules_power_W * eta / vi
+                F_battery_lim = self.battery.max_power() * eta / vi
+
+                limits = {
+                    "Tyre":        F_tyre_lim,
+                    "Motor":       F_motor_lim,
+                    "Power limit": F_rules_lim,
+                    "Battery":     F_battery_lim,
+                }
+                limiting_factor = min(limits, key=limits.get)
+
             # --- Battery ---
-            P_demand = max(0.0, ax_i * self.car.mass * vi + drag * vi)
+            # P_demand is terminal power: wheel power / drivetrain efficiency
+            P_wheel = max(0.0, drive_force * vi)
+            P_terminal = P_wheel / eta
+            if power_limit_W is not None:
+                P_terminal = min(P_terminal, power_limit_W)
             if enable_battery:
-                bat_state = self.battery.step(P_demand, dt_i)
+                bat_state = self.battery.step(P_terminal, dt_i)
                 soc  = bat_state.SOC
                 temp = bat_state.temperature
-                curr = bat_state.current
+                curr = bat_state.current_pack
             else:
                 soc  = self.battery.SOC
                 temp = self.battery.temperature
@@ -295,7 +375,8 @@ class LapSolver:
                 SOC=soc,
                 battery_temp=temp,
                 battery_current=curr,
-                power_demand=P_demand,
+                power_demand=P_terminal,
+                limiting_factor=limiting_factor,
                 t=t,
                 dt=dt_i,
             )

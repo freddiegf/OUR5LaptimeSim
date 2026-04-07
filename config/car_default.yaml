@@ -7,18 +7,18 @@
 # Positive radius in track YAMLs = left-hand turn.
 
 # --- Vehicle inertia & geometry ---
-mass: 280.0          # kg, total including driver
+mass: 320          # kg, total including driver
 cog_x: 0.85          # m from front axle (wheelbase × rear weight fraction)
 cog_y: 0.00          # m from centreline (assume symmetric)
-cog_z: 0.28          # m height above ground
-wheelbase: 1.55      # m
-front_track: 1.22    # m (tyre centreline to centreline)
-rear_track:  1.18    # m
+cog_z: 0.3          # m height above ground
+wheelbase: 1.6      # m
+front_track: 1.25    # m (tyre centreline to centreline)
+rear_track:  1.25    # m
 
 # --- Front tyre ---
 front_tyre:
-  mu_x_nominal: 1.65          # peak longitudinal friction at Fz_nominal
-  mu_y_nominal: 1.70          # peak lateral friction at Fz_nominal
+  mu_x_nominal: 1.6          # peak longitudinal friction at Fz_nominal
+  mu_y_nominal: 1.6          # peak lateral friction at Fz_nominal
   mu_x_load_sensitivity: -0.00012   # d(mu_x)/dFz [1/N] — degrades with load
   mu_y_load_sensitivity: -0.00012
   radius: 0.2032              # rolling radius, m  (8-inch Hoosier R25B)
@@ -26,8 +26,8 @@ front_tyre:
 
 # --- Rear tyre ---
 rear_tyre:
-  mu_x_nominal: 1.65
-  mu_y_nominal: 1.70
+  mu_x_nominal: 1.6
+  mu_y_nominal: 1.6
   mu_x_load_sensitivity: -0.00012
   mu_y_load_sensitivity: -0.00012
   radius: 0.2032
@@ -35,10 +35,10 @@ rear_tyre:
 
 # --- Aerodynamics ---
 aero:
-  Cl: -2.8             # lift coefficient (negative = downforce)
-  Cd:  1.4             # drag coefficient
+  Cl: 2             # downforce coefficient (absolute value used)
+  Cd:  1             # drag coefficient
   area: 1.0            # reference area, m^2
-  cop_x: 0.70          # Centre of Pressure from front axle, m
+  cop_x: 1           # total aero CoP from front axle, m (1.0 = 62.5% rear / 37.5% front)
   rho_air: 1.225       # kg/m^3
 
 # --- Powertrain ---
@@ -46,26 +46,36 @@ powertrain:
   # Motor torque curve: list of [rpm, torque_Nm] pairs
   # Peak torque is flat to base speed, then falls hyperbolically
   torque_curve:
-    - [0,     230]
-    - [1000,  230]
-    - [4000,  230]
-    - [6000,  200]
-    - [8000,  160]
-    - [10000, 100]
-    - [11000,  40]
-  gear_ratio: 11.5             # overall ratio (gearbox × final drive)
-  drivetrain_efficiency: 0.90  # mechanical efficiency (belt/chain losses)
+    - [0,     255]
+    - [1000,  255]
+    - [4000,  255]
+    - [6000,  255]
+    - [8000,  10]
+    - [10000, 0]
+    - [11000,  0]
+  gear_ratio: 4             # overall ratio (gearbox × final drive)
+  drivetrain_efficiency: 0.95  # mechanical efficiency (belt/chain losses)
   drivetrain_type: RWD         # RWD | FWD | AWD
   awd_front_bias: 0.50         # fraction of torque to front (AWD only)
+  power_limit_kW: 80.0         # system electrical power limit (FS rules), kW
 
-# --- Battery ---
+# --- Battery (per-cell — Molicel P42A 21700, 84s6p) ---
+# Pack derived quantities (computed automatically):
+#   V_nominal  = 84 × 3.60 V      = 302.4 V
+#   R_pack     = 84 × 0.010 / 6   = 0.140 Ω
+#   Capacity   = 6 × 4.2 Ah × 302.4 V / 1000 = 7.62 kWh
+#   Thermal    = 504 cells × 0.070 kg × 1000 J/(kg·K) = 35280 J/K
 battery:
-  capacity_kWh: 7.2
-  nominal_voltage: 400.0         # V_oc at SOC=1.0 (fully charged), V
-  internal_resistance: 0.08      # total pack resistance, Ohm
-  # Thermal model: lumped mass, Ohmic heating only (no cooling)
-  # pack_thermal_mass = m_pack * Cp_cells
-  # e.g. 6 kg * 1100 J/(kg·K) ≈ 6600 J/K
-  pack_thermal_mass: 6600.0      # J/K
-  initial_temperature: 25.0      # degrees C
-  initial_SOC: 1.0               # 0–1
+  # Cell electrical (Molicel P42A 21700 datasheet values)
+  cell_capacity_Ah:   4.5        # Ah
+  cell_V_nominal:     4.20       # V at SOC=1.0 (nominal)
+  cell_R_int_Ohm:     0.010      # Ω DC internal resistance per cell
+  # Cell thermal
+  cell_mass_kg:       0.070      # kg (70 g)
+  cell_Cp_J_per_kgK:  1000.0    # J/(kg·K)  NMC cell approximate
+  # Pack configuration
+  n_series:           84         # cells in series
+  n_parallel:         6          # parallel strings
+  # Initial conditions
+  initial_temperature: 20.0      # °C
+  initial_SOC:         1.0       # 0–1

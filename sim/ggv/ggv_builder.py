@@ -75,9 +75,10 @@ class GGVBuilder:
             Fz_front = m*g*lr/L + Fz_aero_front - m*ax*h/L
             Fz_rear  = m*g*lf/L + Fz_aero_rear  + m*ax*h/L
 
-          Lateral transfer split proportional to axle static load:
-            ΔFz_f = m*|ay|*h * (Fz_front / (m*g)) / t_front
-            ΔFz_r = m*|ay|*h * (Fz_rear  / (m*g)) / t_rear
+          Lateral transfer split proportional to axle load:
+            Fz_total = Fz_front + Fz_rear
+            ΔFz_f = m*|ay|*h * (Fz_front / Fz_total) / t_front
+            ΔFz_r = m*|ay|*h * (Fz_rear  / Fz_total) / t_rear
 
           Per wheel (left = outside for ay > 0):
             Fz_FL = 0.5*Fz_front + ΔFz_f * sign(ay)
@@ -105,8 +106,13 @@ class GGVBuilder:
         Fz_rear  = max(0.0, Fz_rear)
 
         # Lateral load transfer magnitude per axle
-        dFz_f = m * abs(ay) * h * (Fz_front / (m * g)) / tf
-        dFz_r = m * abs(ay) * h * (Fz_rear  / (m * g)) / tr
+        Fz_total = Fz_front + Fz_rear
+        if Fz_total > 0.0:
+            dFz_f = m * abs(ay) * h * (Fz_front / Fz_total) / tf
+            dFz_r = m * abs(ay) * h * (Fz_rear  / Fz_total) / tr
+        else:
+            dFz_f = 0.0
+            dFz_r = 0.0
 
         # Distribute: ay > 0 → left turn → left is outside (more load)
         sign = 1.0 if ay >= 0.0 else -1.0
@@ -164,7 +170,11 @@ class GGVBuilder:
             # Motor torque limit
             F_motor = self.pt.max_drive_force(max(v, 0.1), r_driven)
 
-            F_drive  = min(Fx_tyre, F_motor)
+            # System power limit (e.g. FS rules): terminal power × η → wheel force
+            eta = self.pt.p.drivetrain_efficiency
+            F_power_limit = (self.pt.p.power_limit_kW * 1000.0 * eta) / max(v, 0.1)
+
+            F_drive  = min(Fx_tyre, F_motor, F_power_limit)
             F_drag   = self.aero.drag_force(v)
             ax = (F_drive - F_drag) / self.car.mass
 

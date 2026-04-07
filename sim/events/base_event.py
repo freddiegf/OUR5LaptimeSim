@@ -26,6 +26,10 @@ class EventResult:
     peak_ay:            float              # m/s² (absolute)
     peak_speed_ms:      float              # m/s
     total_distance_m:   float              # m
+    # Per-lap data (populated by EnduranceEvent)
+    lap_times:          List[float] = field(default_factory=list)
+    lap_socs:           List[float] = field(default_factory=list)
+    lap_temps:          List[float] = field(default_factory=list)
 
     @property
     def peak_speed_kph(self) -> float:

@@ -89,7 +89,10 @@ class VehicleState:
     SOC:             float   # state of charge, 0–1
     battery_temp:    float   # pack temperature, °C
     battery_current: float   # pack current, A
-    power_demand:    float   # mechanical power demand, W
+    power_demand:    float   # terminal power demand, W
+
+    # ---- Performance limit ----
+    limiting_factor: str     # what limits the car: "Tyre", "Motor", "Power limit", "Battery", "Braking"
 
     # ---- Timing ----
     t:  float   # elapsed time from start of event, s

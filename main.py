@@ -59,11 +59,13 @@ from analysis.reporter import print_event_summary, print_all_results
 # GGV grid parameters
 # ---------------------------------------------------------------------------
 
+
+
 _V_MIN   =  1.0    # m/s
 _V_MAX   = 42.0    # m/s  (~150 km/h — generous upper bound for FS)
-_V_STEPS = 42
+_V_STEPS = 200
 _AY_MAX  = 32.0    # m/s² (just over 3 g)
-_AY_STEPS = 65     # symmetric: -32 to +32
+_AY_STEPS = 400     # symmetric: -32 to +32
 
 
 def build_ggv(car, tyre_f, tyre_r, aero, pt) -> GGVBuilder:
@@ -73,7 +75,7 @@ def build_ggv(car, tyre_f, tyre_r, aero, pt) -> GGVBuilder:
     ggv.build(
         v_range  = np.linspace(_V_MIN, _V_MAX, _V_STEPS),
         ay_range = np.linspace(-_AY_MAX, _AY_MAX, _AY_STEPS),
-        n_iter   = 4,
+        n_iter   = 8,
     )
     print(f"done ({time.perf_counter()-t0:.1f} s)")
     return ggv
@@ -104,8 +106,8 @@ def main(argv: List[str] | None = None) -> None:
         help="Display plots interactively (in addition to saving them)",
     )
     parser.add_argument(
-        "--ds", type=float, default=0.5,
-        help="Track spatial resolution in metres (default: 0.5)",
+        "--ds", type=float, default=0.1,
+        help="Track spatial resolution in metres (default: 0.1)",
     )
     args = parser.parse_args(argv)
 
@@ -131,8 +133,8 @@ def main(argv: List[str] | None = None) -> None:
     print(f"    Wheelbase  : {car.wheelbase:.3f} m")
     print(f"    CoG height : {car.cog_z:.3f} m")
     print(f"    Drivetrain : {car.powertrain.drivetrain_type}")
-    print(f"    Battery    : {car.battery.capacity_kWh:.1f} kWh @ "
-          f"{car.battery.nominal_voltage:.0f} V")
+    print(f"    Battery    : {car.battery.pack_capacity_kWh:.1f} kWh @ "
+          f"{car.battery.pack_V_nominal:.0f} V")
     print()
 
     # --- Build GGV surface (shared across all events) ---

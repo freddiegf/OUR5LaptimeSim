@@ -8,11 +8,19 @@ FS rules:
   - Only the inner lap of each direction is timed.
   - The official time is the average of the two timed laps.
 
-Implementation:
-  The track YAML defines all four circles in sequence.
-  The solver runs the full four-circle path from rest.
-  The timed portion is extracted from states corresponding to
-  circles 2 (left, timed) and 3 (right, timed).
+Track layout (from YAML):
+  approach straight → left entry (untimed) → left timed →
+  crossing straight → right timed → right exit (untimed) →
+  exit straight
+
+The timed regions are determined from the track segment structure:
+  segments[0]: approach straight
+  segments[1]: left circle (untimed)
+  segments[2]: left circle (timed)
+  segments[3]: crossing straight (untimed transition)
+  segments[4]: right circle (timed)
+  segments[5]: right circle (untimed)
+  segments[6]: exit straight
 """
 
 from __future__ import annotations
@@ -39,24 +47,30 @@ class SkidpadEvent(Event):
 
     def run(self) -> EventResult:
         self.battery.reset()
-        # Run the full 4-circle path; car starts and finishes at a crawl
+        power_limit_W = min(
+            self.solver.pt.p.power_limit_kW * 1000.0,
+            self.battery.max_power(),
+        )
+        # Rolling start and finish — car approaches at moderate speed
         states = self.solver.solve(
             self.track,
-            v_initial=0.1,
-            v_final=0.1,
+            v_initial=10.0,
+            v_final=10.0,
             enable_battery=True,
+            power_limit_W=power_limit_W,
         )
 
-        # --- Extract timed portion ---
-        # Each of the 4 circles has equal length (total_length / 4)
-        total_s = self.track.total_length
-        circle_length = total_s / 4.0
+        # --- Extract timed portion from segment boundaries ---
+        seg_lengths = [seg.length for seg in self.track.segments]
+        seg_ends = np.cumsum(seg_lengths)
 
-        # Timed: circles 2 (left) and 3 (right)
-        s_start_left  = circle_length          # start of circle 2
-        s_end_left    = 2.0 * circle_length    # end of circle 2
-        s_start_right = 2.0 * circle_length    # start of circle 3
-        s_end_right   = 3.0 * circle_length    # end of circle 3
+        # Timed left: segment[2] → from seg_ends[1] to seg_ends[2]
+        s_left_start  = seg_ends[1]
+        s_left_end    = seg_ends[2]
+
+        # Timed right: segment[4] → from seg_ends[3] to seg_ends[4]
+        s_right_start = seg_ends[3]
+        s_right_end   = seg_ends[4]
 
         s_arr = np.array([st.s for st in states])
 
@@ -64,9 +78,9 @@ class SkidpadEvent(Event):
             mask = (s_arr >= s_start) & (s_arr < s_end)
             return float(np.sum([states[i].dt for i in range(len(states)) if mask[i]]))
 
-        t_left  = lap_time(s_start_left,  s_end_left)
-        t_right = lap_time(s_start_right, s_end_right)
-        t_timed = t_left + t_right   # FS rules: sum of one left + one right lap
+        t_left  = lap_time(s_left_start,  s_left_end)
+        t_right = lap_time(s_right_start, s_right_end)
+        t_timed = t_left + t_right   # FS: sum of one left + one right lap
 
         result = self._make_result(states)
         # Override total_time with the officially timed portion

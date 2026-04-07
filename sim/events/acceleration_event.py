@@ -30,10 +30,15 @@ class AccelerationEvent(Event):
 
     def run(self) -> EventResult:
         self.battery.reset()
+        power_limit_W = min(
+            self.solver.pt.p.power_limit_kW * 1000.0,
+            self.battery.max_power(),
+        )
         states = self.solver.solve(
             self.track,
             v_initial=0.0,
             v_final=1000.0,       # unconstrained exit — backward pass is non-binding
             enable_battery=True,
+            power_limit_W=power_limit_W,
         )
         return self._make_result(states)
