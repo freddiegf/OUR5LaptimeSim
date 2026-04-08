@@ -1,7 +1,7 @@
 """
 skidpad_event.py
 ================
-FS Skidpad Event: figure-8 with two circles of radius 7.625 m.
+FS Skidpad Event: figure-8 with two circles of centreline radius 9.125 m.
 
 FS rules:
   - Two left-hand (CCW) laps followed by two right-hand (CW) laps.
@@ -80,7 +80,7 @@ class SkidpadEvent(Event):
 
         t_left  = lap_time(s_left_start,  s_left_end)
         t_right = lap_time(s_right_start, s_right_end)
-        t_timed = t_left + t_right   # FS: sum of one left + one right lap
+        t_timed = (t_left + t_right) / 2.0   # FS: average of one left + one right timed lap
 
         result = self._make_result(states)
         # Override total_time with the officially timed portion

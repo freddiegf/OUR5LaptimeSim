@@ -109,7 +109,18 @@ def main(argv: List[str] | None = None) -> None:
         "--ds", type=float, default=0.1,
         help="Track spatial resolution in metres (default: 0.1)",
     )
+    parser.add_argument(
+        "--compare", default=None,
+        help="Path to comparison YAML file (runs multi-car comparison mode)",
+    )
     args = parser.parse_args(argv)
+
+    # --- Comparison mode ---
+    if args.compare:
+        from analysis.comparison import run_comparison
+        run_comparison(args.compare, args.events, ds=args.ds,
+                       show_plots=args.show_plots)
+        return
 
     print()
     print("=" * 60)

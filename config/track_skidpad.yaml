@@ -2,7 +2,10 @@
 # FS Skidpad Event Track
 # ============================================================
 # Figure-8 layout per FS rules:
-#   Inner radius: 7.625 m (15.25 m diameter)
+#   Inner circles: 15.25 m diameter (r = 7.625 m)
+#   Outer circles: 21.25 m diameter (r = 10.625 m)
+#   Driving path: 3 m wide between inner and outer circles
+#   Centreline radius: (7.625 + 10.625) / 2 = 9.125 m
 #   Two laps left (CCW) then two laps right (CW).
 #   Only the inner two laps (one each direction) are timed.
 #
@@ -12,13 +15,13 @@
 #   exit straight
 #
 # Positive radius = left turn (CCW), negative = right turn (CW).
-# Arc length for 360 deg circle: 2*pi*7.625 = 47.91 m
+# Arc length for 360 deg circle: 2*pi*9.125 = 57.33 m
 
 segments:
   - {type: straight, length: 15.0}                     # approach
-  - {type: corner,   radius:  7.625, length: 47.91}    # left entry lap  (untimed)
-  - {type: corner,   radius:  7.625, length: 47.91}    # left timed lap
+  - {type: corner,   radius:  9.125, length: 57.33}    # left entry lap  (untimed)
+  - {type: corner,   radius:  9.125, length: 57.33}    # left timed lap
   - {type: straight, length:  3.5}                     # crossing straight
-  - {type: corner,   radius: -7.625, length: 47.91}    # right timed lap
-  - {type: corner,   radius: -7.625, length: 47.91}    # right exit lap  (untimed)
+  - {type: corner,   radius: -9.125, length: 57.33}    # right timed lap
+  - {type: corner,   radius: -9.125, length: 57.33}    # right exit lap  (untimed)
   - {type: straight, length: 15.0}                     # exit

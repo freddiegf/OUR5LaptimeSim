@@ -65,22 +65,24 @@ This made the capacity 3.6× too small (2.1 kWh instead of 7.6 kWh). Consequence
 
 ---
 
-## Current Baseline Results (`car_default.yaml`)
+## Current Baseline Results (`car_default.yaml`, 80 kW power limit)
 
 | Event      | Time     | Peak Speed | Peak ax  | Peak ay  | Final SOC | ΔT Battery |
 |------------|----------|------------|----------|----------|-----------|------------|
-| Accel      | 5.29 s   | 77.0 km/h  | +1.14 g  | 0.00 g   | 99.7%     | +0.1°C     |
-| Skidpad    | 8.83 s   | 52.2 km/h  | +0.56 g  | 1.58 g   | 99.8%     | +0.0°C     |
-| Sprint     | 57.86 s  | 86.4 km/h  | +1.14 g  | 1.62 g   | 97.9%     | +0.4°C     |
-| Endurance  | 1414 s   | 86.4 km/h  | +1.14 g  | 1.62 g   | 48.7%     | +12.4°C    |
+| Accel      | 3.89 s   | 123.9 km/h | +1.22 g  | 0.00 g   | 99.3%     | +0.7°C     |
+| Skidpad    | 4.66 s   | 66.1 km/h  | +1.22 g  | 1.69 g   | 99.7%     | +0.2°C     |
+| Sprint     | 49.87 s  | 113.1 km/h | +1.22 g  | 1.82 g   | 95.4%     | +4.0°C     |
+| Endurance  | 1025.8 s | 113.1 km/h | +1.22 g  | 1.82 g   | 0.0%      | +152.5°C   |
+
+Note: Endurance battery depletes at lap 21 (18.7 km) with the 80 kW default power limit. The high ΔT reflects the lack of a cooling model.
 
 ---
 
 ## Skidpad Time Interpretation
 
-The reported 8.63 s is the **sum of one left timed lap + one right timed lap**. Per circle: ~4.32 s.
+The reported time is the **average of one left timed lap + one right timed lap**, per FS rules. The track uses the driving path centreline radius of 9.125 m (between the 15.25 m inner and 21.25 m outer diameter circles).
 
-Theoretical check: `v = sqrt(μy × g × r) = sqrt(1.60 × 9.81 × 7.625) = 10.94 m/s` → period = `2π × 7.625 / 10.94 = 4.38 s/circle`. Sim gives 4.32 s (slightly faster due to aero downforce). Physically correct.
+Theoretical check: `v = sqrt(μy × g × r) = sqrt(1.60 × 9.81 × 9.125) = 11.95 m/s` → period = `2π × 9.125 / 11.95 = 4.80 s/circle`. Sim gives 4.66 s (faster due to aero downforce). Physically correct.
 
 ---
 
@@ -106,29 +108,8 @@ Theoretical check: `v = sqrt(μy × g × r) = sqrt(1.60 × 9.81 × 7.625) = 10.9
 
 ## Known Limitations
 
-- **Endurance battery temperature** now realistic at 32.4°C
-  - Still no cooling model — temperature only rises
+- No cooling model — battery temperature only rises (unrealistic for long endurance runs)
 - No regenerative braking modelled
 - Lateral force distribution assumes equal slip angles (no front/rear balance)
 - No tyre temperature model
-
----
-
-## Architecture
-
-```
-YAML → CarParams → {TyreModel, AeroModel, Powertrain, BatteryModel}
-Track YAML → TrackProfile (s, κ, x, y)
-CarParams + Tyres + Aero + Powertrain → GGVBuilder.build() → GGV surface
-GGV + BatteryModel → LapSolver.solve(TrackProfile) → [VehicleState]
-[VehicleState] → EventResult → Plotter + Reporter
-```
-
-Solver algorithm:
-1. Pre-compute corner speed caps (binary search on GGV lateral limit)
-2. Forward pass with caps (accelerate within GGV + cap ceiling)
-3. Backward pass with caps (brake within GGV + cap ceiling)
-4. Combine (element-wise minimum)
-5. Build VehicleState list (forces, battery, timing)
-
-GGV build: ~0.2 s. Full 4-event run: ~60 s (endurance: ~35 laps × solve).
+- Quasi-static — no transient dynamics or weight transfer lag

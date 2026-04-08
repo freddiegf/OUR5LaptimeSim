@@ -127,11 +127,8 @@ class CarParams:
 # YAML loader
 # ---------------------------------------------------------------------------
 
-def load_car_params(yaml_path: str) -> CarParams:
-    """Parse a car parameter YAML file and return a validated CarParams."""
-    with open(yaml_path, "r") as fh:
-        raw = yaml.safe_load(fh)
-
+def build_car_params(raw: dict) -> CarParams:
+    """Build a CarParams from a raw dict (e.g. parsed YAML)."""
     front_tyre = TyreParams(**raw["front_tyre"])
     rear_tyre  = TyreParams(**raw["rear_tyre"])
 
@@ -176,3 +173,10 @@ def load_car_params(yaml_path: str) -> CarParams:
         powertrain=powertrain,
         battery=battery,
     )
+
+
+def load_car_params(yaml_path: str) -> CarParams:
+    """Parse a car parameter YAML file and return a validated CarParams."""
+    with open(yaml_path, "r") as fh:
+        raw = yaml.safe_load(fh)
+    return build_car_params(raw)
