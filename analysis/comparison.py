@@ -11,6 +11,7 @@ Usage (from main.py):
 from __future__ import annotations
 
 import copy
+import itertools
 import os
 import time
 from dataclasses import dataclass, field
@@ -68,6 +69,79 @@ def _deep_merge(base: dict, overrides: dict) -> dict:
         else:
             result[key] = value
     return result
+
+
+def _set_nested(d: dict, dotpath: str, value) -> dict:
+    """Set a value in a nested dict using a dot-separated path.
+    e.g. _set_nested({}, "powertrain.power_limit_kW", 30) →
+         {"powertrain": {"power_limit_kW": 30}}
+    """
+    keys = dotpath.split(".")
+    cur = d
+    for k in keys[:-1]:
+        cur = cur.setdefault(k, {})
+    cur[keys[-1]] = value
+    return d
+
+
+def _expand_sweep(sweep_cfg: dict) -> List[dict]:
+    """Expand a sweep config into a list of variant defs.
+
+    Each entry in params is either a single parameter or a paired group.
+    The Cartesian product is taken across entries (not within a group).
+
+    Single parameter:
+        - path: "aero.Cl"
+          values: [2.0, 2.5, 3.0]
+
+    Paired group (values move together in lockstep):
+        - paths: ["mass", "battery.n_parallel"]
+          values:
+            - [320, 5]
+            - [330, 6]
+
+    label_format: (optional) e.g. "{power_limit_kW}kW / {n_parallel}p"
+      Available keys are the last segment of each path.
+
+    Returns a list of {"label": ..., "overrides": {...}} dicts,
+    one per combination in the Cartesian product.
+    """
+    # Normalise each param entry into a list of (paths, value_tuples)
+    # so that both single and paired forms are handled uniformly.
+    groups: List[tuple[List[str], List[tuple]]] = []
+    for p in sweep_cfg["params"]:
+        if "path" in p:
+            # Single parameter: wrap into a 1-element group
+            paths = [p["path"]]
+            vals = [(v,) for v in p["values"]]
+        else:
+            # Paired group
+            paths = p["paths"]
+            vals = [tuple(row) for row in p["values"]]
+        groups.append((paths, vals))
+
+    label_fmt = sweep_cfg.get("label_format")
+
+    # Cartesian product across groups
+    variants = []
+    group_vals = [g[1] for g in groups]
+    for combo in itertools.product(*group_vals):
+        overrides: dict = {}
+        label_parts = {}
+        for (paths, _), val_tuple in zip(groups, combo):
+            for path, val in zip(paths, val_tuple):
+                _set_nested(overrides, path, val)
+                short_name = path.split(".")[-1]
+                label_parts[short_name] = val
+
+        if label_fmt:
+            label = label_fmt.format(**label_parts)
+        else:
+            label = " / ".join(f"{k}={v}" for k, v in label_parts.items())
+
+        variants.append({"label": label, "overrides": overrides})
+
+    return variants
 
 
 def _ensure_output_dir() -> str:
@@ -183,6 +257,16 @@ def print_comparison_table(
 # Comparison bar chart — event times
 # ---------------------------------------------------------------------------
 
+def _temp_color(temp_c: float) -> str:
+    """Bar colour based on final battery temperature."""
+    if temp_c < 60.0:
+        return "#2ecc71"   # green
+    elif temp_c <= 65.0:
+        return "#f39c12"   # orange
+    else:
+        return "#e74c3c"   # red
+
+
 def plot_comparison_bars(
     variant_results: List[VariantResult],
     events: List[str],
@@ -193,25 +277,35 @@ def plot_comparison_bars(
     n_variants = len(variant_results)
     colours = cm.get_cmap("Set2", max(n_variants, 3))
 
-    fig, axes = plt.subplots(1, n_events, figsize=(4 * n_events, 5))
+    # Scale width with variant count so labels remain readable
+    width_per_variant = max(0.7, 1.0)
+    subplot_width = max(4.0, n_variants * width_per_variant + 2.0)
+    fig, axes = plt.subplots(1, n_events,
+                             figsize=(subplot_width * n_events, 6))
     if n_events == 1:
         axes = [axes]
 
     for ax, ev in zip(axes, events):
         times = []
         labels = []
+        bar_colors = []
         for vr in variant_results:
             r = vr.results.get(ev)
             times.append(r.total_time if r else 0.0)
             labels.append(vr.label)
+            # Endurance: colour by final battery temperature
+            if ev == "endurance" and r is not None:
+                bar_colors.append(_temp_color(r.final_battery_temp))
+            else:
+                bar_colors.append(colours(len(bar_colors) % n_variants))
 
         bars = ax.bar(range(n_variants), times,
-                      color=[colours(i) for i in range(n_variants)],
+                      color=bar_colors,
                       edgecolor="white", linewidth=0.5)
         ax.set_title(ev.capitalize(), fontsize=11, fontweight="bold")
         ax.set_ylabel("Time (s)")
         ax.set_xticks(range(n_variants))
-        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
+        ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
         ax.grid(True, alpha=0.3, axis="y")
 
         # Annotate bar values
@@ -219,7 +313,17 @@ def plot_comparison_bars(
             ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                     f"{t:.2f}", ha="center", va="bottom", fontsize=7)
 
-    fig.suptitle("Car Comparison — Event Times", fontsize=13, fontweight="bold")
+        # Add temperature legend for endurance
+        if ev == "endurance":
+            from matplotlib.patches import Patch
+            legend_patches = [
+                Patch(facecolor="#2ecc71", label="T < 60\u00b0C"),
+                Patch(facecolor="#f39c12", label="60-65\u00b0C"),
+                Patch(facecolor="#e74c3c", label="T > 65\u00b0C"),
+            ]
+            ax.legend(handles=legend_patches, fontsize=7, loc="upper right")
+
+    fig.suptitle("Car Comparison \u2014 Event Times", fontsize=13, fontweight="bold")
     fig.tight_layout()
     path = os.path.join(_ensure_output_dir(), "comparison_event_times.png")
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -311,7 +415,13 @@ def run_comparison(
     with open(base_yaml_path, "r") as fh:
         base_raw = yaml.safe_load(fh)
 
-    variant_defs = config["variants"]
+    # Support both explicit variants and grid sweep
+    variant_defs = config.get("variants", [])
+    if "sweep" in config:
+        variant_defs = variant_defs + _expand_sweep(config["sweep"])
+    if not variant_defs:
+        print("  ERROR: No variants or sweep defined in comparison config.")
+        return []
     if "events" in config:
         events = config["events"]
 

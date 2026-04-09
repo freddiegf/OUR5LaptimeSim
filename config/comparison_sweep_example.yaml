@@ -1,0 +1,32 @@
+# ============================================================
+# Car Comparison — Grid Sweep Example
+# ============================================================
+# Instead of listing each variant manually, define parameters
+# and their values.  The sim runs every combination (Cartesian
+# product).
+#
+# This example sweeps 3 power limits x 3 battery sizes = 9 variants.
+#
+# Usage:
+#   python3 main.py --compare config/comparison_sweep_example.yaml
+#   python3 main.py --compare config/comparison_sweep_example.yaml --events endurance
+# ============================================================
+
+base: config/car_default.yaml
+
+sweep:
+  params:
+    - path: powertrain.power_limit_kW
+      values: [25, 27.5, 30, 32.5, 35, 37.5,  40, 42.5,  45, 47.5, 50]
+
+    # Paired: mass and n_parallel move together
+    - paths: [mass, battery.n_parallel]
+      values:
+        - [310, 4]
+        - [320, 5]
+        - [330, 6]
+        - [340, 7]
+        - [350, 8]
+
+    - path: aero.Cl
+      values: [0, 0.5, 1.0, 1.5, 2]

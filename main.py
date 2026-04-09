@@ -18,6 +18,7 @@ Example
 -------
     python main.py --events accel skidpad sprint endurance
     python main.py --car config/car_default.yaml --events sprint --show-plots
+    python3 main.py --compare config/comparison_sweep_example.yaml --events endurance
 """
 
 from __future__ import annotations

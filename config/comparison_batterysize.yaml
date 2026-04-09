@@ -1,0 +1,133 @@
+# ============================================================
+# Car Comparison Configuration — Example
+# ============================================================
+# Specify a base car config and named variants with parameter
+# overrides.  Any parameter in the car YAML hierarchy can be
+# overridden (mass, aero.Cl, powertrain.power_limit_kW, etc.).
+#
+# Usage:
+#   python main.py --compare config/comparison_example.yaml
+# ============================================================
+
+base: config/car_default.yaml
+
+variants:
+  - label: "5p 30kW"
+    overrides:
+      mass: 320
+      powertrain:
+        power_limit_kW: 30.0
+      battery:
+        n_parallel: 5
+
+  - label: "5p 32.5kW"
+    overrides:
+      mass: 320
+      powertrain:
+        power_limit_kW: 32.5
+      battery:
+        n_parallel: 5
+
+  - label: "5p 35kW"
+    overrides:
+      mass: 320
+      powertrain:
+        power_limit_kW: 35
+      battery:
+        n_parallel: 5
+
+  - label: "5p 37.5kW"
+    overrides:
+      mass: 320
+      powertrain:
+        power_limit_kW: 37.50
+      battery:
+        n_parallel: 5
+
+  - label: "5p 40kW"
+    overrides:
+      mass: 320
+      powertrain:
+        power_limit_kW: 40.0
+      battery:
+        n_parallel: 5
+
+  - label: "6p 30kW"
+    overrides:
+      mass: 330
+      powertrain:
+        power_limit_kW: 30.0
+      battery:
+        n_parallel: 6
+
+  - label: "6p 32.5kW"
+    overrides:
+      mass: 330
+      powertrain:
+        power_limit_kW: 32.5
+      battery:
+        n_parallel: 6
+
+  - label: "6p 35kW"
+    overrides:
+      mass: 330
+      powertrain:
+        power_limit_kW: 35
+      battery:
+        n_parallel: 6
+
+  - label: "6p 37.5kW"
+    overrides:
+      mass: 330
+      powertrain:
+        power_limit_kW: 37.50
+      battery:
+        n_parallel: 6
+
+  - label: "6p 40kW"
+    overrides:
+      mass: 330
+      powertrain:
+        power_limit_kW: 40.0
+      battery:
+        n_parallel: 6
+
+  - label: "4p 30kW"
+    overrides:
+      mass: 310
+      powertrain:
+        power_limit_kW: 30.0
+      battery:
+        n_parallel: 4
+
+  - label: "4p 32.5kW"
+    overrides:
+      mass: 310
+      powertrain:
+        power_limit_kW: 32.5
+      battery:
+        n_parallel: 4
+
+  - label: "4p 35kW"
+    overrides:
+      mass: 310
+      powertrain:
+        power_limit_kW: 35
+      battery:
+        n_parallel: 4
+
+  - label: "4p 37.5kW"
+    overrides:
+      mass: 310
+      powertrain:
+        power_limit_kW: 37.50
+      battery:
+        n_parallel: 4
+
+  - label: "4p 40kW"
+    overrides:
+      mass: 310
+      powertrain:
+        power_limit_kW: 40.0
+      battery:
+        n_parallel: 4
