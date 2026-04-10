@@ -397,6 +397,92 @@ def plot_comparison_endurance_battery(
 
 
 # ---------------------------------------------------------------------------
+# Heatmap for 2-axis sweep
+# ---------------------------------------------------------------------------
+
+def plot_sweep_heatmaps(
+    variant_results: List[VariantResult],
+    sweep_cfg: dict,
+    events: List[str],
+    show: bool = False,
+) -> Optional[plt.Figure]:
+    """Plot heatmaps when the sweep has exactly 2 param groups.
+
+    X-axis and Y-axis are the two sweep dimensions. Cell colour = event time.
+    One subplot per event.
+    """
+    groups = []
+    for p in sweep_cfg["params"]:
+        if "path" in p:
+            label = p["path"].split(".")[-1]
+            vals = p["values"]
+        else:
+            label = " / ".join(path.split(".")[-1] for path in p["paths"])
+            vals = [tuple(row) for row in p["values"]]
+        groups.append((label, vals))
+
+    if len(groups) != 2:
+        return None  # heatmap only for 2-axis sweeps
+
+    x_label, x_vals = groups[0]
+    y_label, y_vals = groups[1]
+    nx, ny = len(x_vals), len(y_vals)
+
+    if len(variant_results) != nx * ny:
+        return None  # mismatch — mixed sweep + explicit variants
+
+    n_events = len(events)
+    fig, axes = plt.subplots(1, n_events, figsize=(6 * n_events, 5))
+    if n_events == 1:
+        axes = [axes]
+
+    for ax, ev in zip(axes, events):
+        grid = np.full((ny, nx), np.nan)
+        for idx, vr in enumerate(variant_results):
+            xi = idx % ny   # inner loop = y-axis values
+            yi = idx // ny  # outer loop = x-axis values
+            # _expand_sweep uses itertools.product(*[x_vals, y_vals])
+            # so ordering is: for x in x_vals: for y in y_vals
+            r = vr.results.get(ev)
+            if r:
+                grid[xi, yi] = r.total_time
+
+        x_tick_labels = [str(v) for v in x_vals]
+        y_tick_labels = [str(v) for v in y_vals]
+
+        im = ax.imshow(grid, aspect="auto", origin="lower", cmap="RdYlGn_r")
+        fig.colorbar(im, ax=ax, label="Time (s)", shrink=0.8)
+
+        ax.set_xticks(range(nx))
+        ax.set_xticklabels(x_tick_labels, fontsize=8)
+        ax.set_yticks(range(ny))
+        ax.set_yticklabels(y_tick_labels, fontsize=8)
+        ax.set_xlabel(x_label, fontsize=9)
+        ax.set_ylabel(y_label, fontsize=9)
+        ax.set_title(ev.capitalize(), fontsize=11, fontweight="bold")
+
+        # Annotate cells with values
+        for yi_idx in range(ny):
+            for xi_idx in range(nx):
+                val = grid[yi_idx, xi_idx]
+                if not np.isnan(val):
+                    ax.text(xi_idx, yi_idx, f"{val:.1f}",
+                            ha="center", va="center", fontsize=7,
+                            color="white" if val > np.nanmedian(grid) else "black")
+
+    fig.suptitle("Sweep Heatmap \u2014 Event Times", fontsize=13, fontweight="bold")
+    fig.tight_layout()
+    path = os.path.join(_ensure_output_dir(), "comparison_sweep_heatmap.png")
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    print(f"  Saved {path}")
+    return fig
+
+
+# ---------------------------------------------------------------------------
 # Main comparison entry point
 # ---------------------------------------------------------------------------
 
@@ -512,5 +598,8 @@ def run_comparison(
     plot_comparison_bars(variant_results, events, show=show_plots)
     if "endurance" in events:
         plot_comparison_endurance_battery(variant_results, show=show_plots)
+    if "sweep" in config:
+        plot_sweep_heatmaps(variant_results, config["sweep"], events,
+                            show=show_plots)
 
     return variant_results

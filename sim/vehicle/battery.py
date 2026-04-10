@@ -82,13 +82,17 @@ class BatteryModel:
 
     def solve_current(self, P_demand: float) -> tuple[float, bool]:
         """
-        Solve for pack current given mechanical power demand P_demand (W).
+        Solve for pack current given terminal power demand P_demand (W).
+
+        Positive P_demand = discharging (driving).
+        Negative P_demand = charging (regenerative braking).
 
         Quadratic: R_pack×I² - V_oc×I + P = 0
         Returns (I_pack, feasible).
+        I_pack > 0 = discharge, I_pack < 0 = charge.
         feasible=False if demand exceeds maximum deliverable power.
         """
-        if P_demand <= 0.0:
+        if P_demand == 0.0:
             return 0.0, True
 
         V = self.V_oc(self.SOC)
@@ -96,8 +100,11 @@ class BatteryModel:
         discriminant = V ** 2 - 4.0 * R * P_demand
 
         if discriminant < 0.0:
-            return V / (2.0 * R), False   # clamped to peak current
+            # Discharge exceeds max power — clamp to peak current
+            return V / (2.0 * R), False
 
+        # For discharge (P>0): lower root gives smaller current (normal regime)
+        # For charge (P<0): discriminant > V², so sqrt > V, giving I < 0
         I = (V - math.sqrt(discriminant)) / (2.0 * R)
         return I, True
 
@@ -108,6 +115,10 @@ class BatteryModel:
     def step(self, P_demand: float, dt: float) -> BatteryState:
         """
         Advance battery state by dt seconds under power demand P_demand (W).
+
+        P_demand > 0: discharging (driving) — SOC decreases.
+        P_demand < 0: charging (regen braking) — SOC increases.
+
         Updates SOC and temperature in-place.
         """
         I_pack, _feasible = self.solve_current(P_demand)
@@ -115,8 +126,9 @@ class BatteryModel:
 
         Q_heat      = I_pack ** 2 * R * dt              # J — total Ohmic heat
         energy_used = self.V_oc(self.SOC) * I_pack * dt  # J — energy from pack
+        # energy_used > 0 → discharge, < 0 → charge
 
-        self.SOC = max(0.0, self.SOC - energy_used / self._capacity_J)
+        self.SOC = max(0.0, min(1.0, self.SOC - energy_used / self._capacity_J))
         self.temperature += Q_heat / self.p.pack_thermal_mass
 
         return BatteryState(

@@ -20,7 +20,8 @@
 #   Chicane3: -30°+30°   Cumulative: -330°   (net 0°)
 #   T8:       +90°       Cumulative: -240°
 #   T9:       -90°       Cumulative: -330°
-#   T10:      -30°       Cumulative: -360° ✓
+#   T10:      -30°       Cumulative: -360°
+#   Return:   -34.6°+35.5° Cumulative: -359.1° (≈-360° with rounding) ✓
 #
 # Positive radius = left-hand (CCW); negative = right-hand (CW).
 # All lengths are arc-lengths in metres.
@@ -112,5 +113,9 @@ segments:
   # T10 — right 30°, r=15 m (exit onto S/F straight)
   - {type: corner,    radius: -15.0, length:  7.85}
 
-  # ====== BACK → S/F ======
-  - {type: straight,  length: 45.0}
+  # ====== RETURN TO S/F (loop closure) ======
+  # Right 23.0°, r=15 m → straight 125.2 m → Left 23.8°, r=15 m
+  # Closes the track back to (0, 0) facing east.
+  - {type: corner,    radius: -15.0, length:  6.02}
+  - {type: straight,  length: 125.2}
+  - {type: corner,    radius:  15.0, length:  6.22}

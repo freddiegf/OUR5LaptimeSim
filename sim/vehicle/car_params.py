@@ -43,6 +43,7 @@ class PowertrainParams:
     drivetrain_type: str          # "RWD" | "FWD" | "AWD"
     awd_front_bias: float = 0.5  # fraction of torque to front (AWD only)
     power_limit_kW: float = 80.0  # system power limit (e.g. FS rules), kW
+    regen_power_limit_kW: float = 0.0  # max regen braking power (electrical), kW
 
 
 @dataclass
@@ -144,6 +145,7 @@ def build_car_params(raw: dict) -> CarParams:
         drivetrain_type=pt_raw["drivetrain_type"],
         awd_front_bias=pt_raw.get("awd_front_bias", 0.5),
         power_limit_kW=pt_raw.get("power_limit_kW", 80.0),
+        regen_power_limit_kW=pt_raw.get("regen_power_limit_kW", 0.0),
     )
 
     bat_raw = raw["battery"]

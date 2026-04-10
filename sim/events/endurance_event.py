@@ -85,7 +85,8 @@ class EnduranceEvent(Event):
             lap_temps.append(self.battery.temperature)
 
             # Rolling restart: use the exit speed of this lap as entry for next
-            v_entry = min(lap_states[-1].v, 15.0)   # cap at 15 m/s for realism
+            # Track is a closed loop, so start/finish speed should match
+            v_entry = lap_states[-1].v
 
             # Early exit if battery is depleted
             if self.battery.SOC <= 0.01:

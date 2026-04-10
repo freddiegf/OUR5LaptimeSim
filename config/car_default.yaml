@@ -58,6 +58,7 @@ powertrain:
   drivetrain_type: RWD         # RWD | FWD | AWD
   awd_front_bias: 0.50         # fraction of torque to front (AWD only)
   power_limit_kW: 80.0         # system electrical power limit (FS rules), kW
+  regen_power_limit_kW: 10.0   # max regen braking power (electrical), kW — driven wheels only
 
 # --- Battery (per-cell — Molicel P42A 21700, 84s6p) ---
 # Pack derived quantities (computed automatically):

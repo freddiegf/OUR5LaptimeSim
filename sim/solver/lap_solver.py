@@ -338,10 +338,28 @@ class LapSolver:
 
             # --- Battery ---
             # P_demand is terminal power: wheel power / drivetrain efficiency
-            P_wheel = max(0.0, drive_force * vi)
-            P_terminal = P_wheel / eta
-            if power_limit_W is not None:
-                P_terminal = min(P_terminal, power_limit_W)
+            # Positive = discharging, Negative = regen charging
+            regen_limit_W = self.pt.p.regen_power_limit_kW * 1000.0
+            if drive_force > 0.0:
+                # Driving: battery discharges
+                P_wheel = drive_force * vi
+                P_terminal = P_wheel / eta
+                if power_limit_W is not None:
+                    P_terminal = min(P_terminal, power_limit_W)
+            elif brake_force > 0.0 and regen_limit_W > 0.0:
+                # Braking with regen: only driven wheels recover energy
+                # Compute braking force on driven wheels only
+                Fx_brake_driven = (rear_frac * (abs(Fx_RL) + abs(Fx_RR))
+                                   + front_frac * (abs(Fx_FL) + abs(Fx_FR)))
+                P_regen_wheel = Fx_brake_driven * vi
+                # Apply drivetrain losses (wheel→motor→battery)
+                P_regen_electrical = P_regen_wheel * eta
+                # Cap at regen power limit
+                P_regen_electrical = min(P_regen_electrical, regen_limit_W)
+                P_terminal = -P_regen_electrical   # negative = charging
+            else:
+                P_terminal = 0.0
+
             if enable_battery:
                 bat_state = self.battery.step(P_terminal, dt_i)
                 soc  = bat_state.SOC
