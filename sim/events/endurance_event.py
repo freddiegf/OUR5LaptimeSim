@@ -51,13 +51,25 @@ class EnduranceEvent(Event):
         lap_temps: list[float] = []
 
         rules_power_W = self.solver.pt.p.power_limit_kW * 1000.0
+        rules_regen_W = self.solver.pt.p.regen_power_limit_kW * 1000.0
 
         while cumulative_distance < _ENDURANCE_DISTANCE_M and lap_num < _MAX_LAPS:
             lap_num += 1
 
+            # Thermal derate based on lap-start battery temperature. Mirrored
+            # onto regen so charging current is throttled alongside discharge.
+            derate_frac = self.battery.derate_fraction()
+
             # Battery deliverable power may be less than the rules limit
             battery_power_W = self.battery.max_power()
-            effective_power_W = min(rules_power_W, battery_power_W)
+            effective_power_W = min(rules_power_W * derate_frac, battery_power_W)
+            effective_regen_W = rules_regen_W * derate_frac
+
+            if derate_frac < 1.0:
+                print(f"  [Endurance] Lap {lap_num}: T_bat="
+                      f"{self.battery.temperature:.1f} C, power derated to "
+                      f"{effective_power_W/1000:.1f} kW "
+                      f"({derate_frac*100:.0f}%)")
 
             lap_states = self.solver.solve(
                 self.track,
@@ -67,6 +79,7 @@ class EnduranceEvent(Event):
                 t_start=cumulative_time,
                 s_offset=cumulative_distance,
                 power_limit_W=effective_power_W,
+                regen_power_limit_W=effective_regen_W,
             )
 
             if not lap_states:

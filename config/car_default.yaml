@@ -80,3 +80,11 @@ battery:
   # Initial conditions
   initial_temperature: 20.0      # °C
   initial_SOC:         1.0       # 0–1
+  # Thermal power derate (stepwise). At or above each temp_C the usable
+  # fraction of power_limit_kW drops to the given value. Applied to both
+  # discharge and regen. Lap-level: re-evaluated at the start of each
+  # endurance lap from the current battery temperature. Set to [] to disable.
+  thermal_derate:
+    - {temp_C: 55.0, fraction: 0.5}   # power_limit_kW / 2
+    - {temp_C: 57.0, fraction: 0.2}   # power_limit_kW / 5
+    - {temp_C: 59.0, fraction: 0.05}   # power_limit_kW / 10

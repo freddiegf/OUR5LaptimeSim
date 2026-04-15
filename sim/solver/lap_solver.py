@@ -72,21 +72,26 @@ class LapSolver:
         t_start: float = 0.0,
         s_offset: float = 0.0,
         power_limit_W: float | None = None,
+        regen_power_limit_W: float | None = None,
     ) -> List[VehicleState]:
         """
         Run the forward-backward solver on the given track.
 
         Parameters
         ----------
-        track          : discretised track profile
-        v_initial      : speed at the start of the track, m/s
-        v_final        : target speed at the end (for backward pass), m/s
-        enable_battery : if False, battery.step() is skipped (battery state is
-                         still logged as current values)
-        t_start        : time offset for the returned states (for multi-lap runs)
-        s_offset       : arc-length offset for returned states
-        power_limit_W  : if given, overrides the powertrain power_limit_kW for
-                         this solve (used to enforce battery deliverable power)
+        track               : discretised track profile
+        v_initial           : speed at the start of the track, m/s
+        v_final             : target speed at the end (for backward pass), m/s
+        enable_battery      : if False, battery.step() is skipped (battery
+                              state is still logged as current values)
+        t_start             : time offset for returned states (multi-lap runs)
+        s_offset            : arc-length offset for returned states
+        power_limit_W       : if given, overrides the powertrain power_limit_kW
+                              for this solve (used to enforce battery
+                              deliverable power and thermal derate)
+        regen_power_limit_W : if given, overrides the powertrain
+                              regen_power_limit_kW for this solve (used to
+                              mirror a thermal derate on regen charging)
 
         Returns
         -------
@@ -97,7 +102,7 @@ class LapSolver:
         v_bwd = self._backward_pass(track, v_final, v_cap)
         v     = self._combine(v_fwd, v_bwd)
         return self._build_states(track, v, enable_battery, t_start, s_offset,
-                                  power_limit_W)
+                                  power_limit_W, regen_power_limit_W)
 
     # ------------------------------------------------------------------
     # Forward pass
@@ -213,6 +218,7 @@ class LapSolver:
         t_start: float,
         s_offset: float,
         power_limit_W: float | None = None,
+        regen_power_limit_W: float | None = None,
     ) -> List[VehicleState]:
         N  = len(track.s)
         ds = track.ds
@@ -339,7 +345,10 @@ class LapSolver:
             # --- Battery ---
             # P_demand is terminal power: wheel power / drivetrain efficiency
             # Positive = discharging, Negative = regen charging
-            regen_limit_W = self.pt.p.regen_power_limit_kW * 1000.0
+            if regen_power_limit_W is not None:
+                regen_limit_W = regen_power_limit_W
+            else:
+                regen_limit_W = self.pt.p.regen_power_limit_kW * 1000.0
             if drive_force > 0.0:
                 # Driving: battery discharges
                 P_wheel = drive_force * vi

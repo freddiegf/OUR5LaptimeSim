@@ -163,3 +163,27 @@ class BatteryModel:
 
     def energy_used_kWh(self) -> float:
         return (self.p.initial_SOC - self.SOC) * self.p.pack_capacity_kWh
+
+    # ------------------------------------------------------------------
+    # Thermal derate
+    # ------------------------------------------------------------------
+
+    def derate_fraction(self, temperature: float | None = None) -> float:
+        """
+        Power fraction allowed at a given temperature, per the YAML
+        ``thermal_derate`` breakpoints.
+
+        Stepwise: the returned fraction is the fraction of the highest
+        breakpoint whose ``temp_C`` is ≤ ``temperature``. Below the first
+        breakpoint the fraction is 1.0 (no derate). Used for both discharge
+        and regen power limits.
+        """
+        if temperature is None:
+            temperature = self.temperature
+        fraction = 1.0
+        for temp_C, frac in self.p.thermal_derate:
+            if temperature >= temp_C:
+                fraction = frac
+            else:
+                break
+        return fraction

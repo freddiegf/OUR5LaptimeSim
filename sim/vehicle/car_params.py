@@ -12,6 +12,9 @@ from typing import List, Tuple
 import yaml
 
 
+DerateBreakpoint = Tuple[float, float]   # (temp_C, power_fraction)
+
+
 # ---------------------------------------------------------------------------
 # Sub-parameter dataclasses
 # ---------------------------------------------------------------------------
@@ -66,6 +69,10 @@ class BatteryParams:
     # Initial conditions
     initial_temperature: float    # °C (uniform cell temperature)
     initial_SOC: float = 1.0
+    # Temperature-based power derate: list of (temp_C, fraction) breakpoints.
+    # Stepwise: below the first temp the fraction is 1.0; at or above temp_C[i]
+    # the fraction becomes fraction[i]. Applied to both discharge and regen.
+    thermal_derate: List[DerateBreakpoint] = field(default_factory=list)
 
     # --- Derived pack quantities (computed in __post_init__) ---
     pack_V_nominal: float = field(init=False)        # V
@@ -149,6 +156,12 @@ def build_car_params(raw: dict) -> CarParams:
     )
 
     bat_raw = raw["battery"]
+    derate_raw = bat_raw.get("thermal_derate", []) or []
+    thermal_derate: List[DerateBreakpoint] = [
+        (float(entry["temp_C"]), float(entry["fraction"]))
+        for entry in derate_raw
+    ]
+    thermal_derate.sort(key=lambda pt: pt[0])
     battery = BatteryParams(
         cell_capacity_Ah    = bat_raw["cell_capacity_Ah"],
         cell_V_nominal      = bat_raw["cell_V_nominal"],
@@ -159,6 +172,7 @@ def build_car_params(raw: dict) -> CarParams:
         n_parallel          = int(bat_raw["n_parallel"]),
         initial_temperature = bat_raw["initial_temperature"],
         initial_SOC         = bat_raw.get("initial_SOC", 1.0),
+        thermal_derate      = thermal_derate,
     )
 
     return CarParams(
