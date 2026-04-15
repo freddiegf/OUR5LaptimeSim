@@ -7,7 +7,7 @@
 # Positive radius in track YAMLs = left-hand turn.
 
 # --- Vehicle inertia & geometry ---
-mass: 320          # kg, total including driver
+mass: 330          # kg, total including driver
 cog_x: 0.85          # m from front axle (wheelbase × rear weight fraction)
 cog_y: 0.00          # m from centreline (assume symmetric)
 cog_z: 0.3          # m height above ground
@@ -58,7 +58,7 @@ powertrain:
   drivetrain_type: RWD         # RWD | FWD | AWD
   awd_front_bias: 0.50         # fraction of torque to front (AWD only)
   power_limit_kW: 80.0         # system electrical power limit (FS rules), kW
-  regen_power_limit_kW: 10.0   # max regen braking power (electrical), kW — driven wheels only
+  regen_power_limit_kW: 0.0   # max regen braking power (electrical), kW — driven wheels only
 
 # --- Battery (per-cell — Molicel P42A 21700, 84s6p) ---
 # Pack derived quantities (computed automatically):
