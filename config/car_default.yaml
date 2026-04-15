@@ -19,8 +19,8 @@ rear_track:  1.25    # m
 front_tyre:
   mu_x_nominal: 1.6          # peak longitudinal friction at Fz_nominal
   mu_y_nominal: 1.6          # peak lateral friction at Fz_nominal
-  mu_x_load_sensitivity: -0.00012   # d(mu_x)/dFz [1/N] — degrades with load
-  mu_y_load_sensitivity: -0.00012
+  mu_x_load_sensitivity: 0 #-0.00012   # d(mu_x)/dFz [1/N] — degrades with load
+  mu_y_load_sensitivity: 0 #-0.00012
   radius: 0.2032              # rolling radius, m  (8-inch Hoosier R25B)
   Fz_nominal: 700.0           # N — reference normal load for mu calibration
 

@@ -38,7 +38,13 @@ from sim.vehicle.powertrain import Powertrain
 from sim.vehicle.battery import BatteryModel
 
 # --- Track ---
-from sim.track.track_builder import build_track, load_track_from_yaml
+from sim.track.track_builder import (
+    DEFAULT_SPRINT_LAYOUT,
+    SPRINT_LAYOUTS,
+    build_sprint_track,
+    build_track,
+    load_track_from_yaml,
+)
 
 # --- GGV & solver ---
 from sim.ggv.ggv_builder import GGVBuilder
@@ -114,22 +120,32 @@ def main(argv: List[str] | None = None) -> None:
         "--compare", default=None,
         help="Path to comparison YAML file (runs multi-car comparison mode)",
     )
+    parser.add_argument(
+        "--track-layout", choices=SPRINT_LAYOUTS, default=DEFAULT_SPRINT_LAYOUT,
+        help=(
+            "Sprint/endurance track layout. "
+            "'fsuk2025' uses FSUK2025.svg scaled to 1 km/lap (default); "
+            "'synthetic' uses config/track_sprint.yaml."
+        ),
+    )
     args = parser.parse_args(argv)
 
     # --- Comparison mode ---
     if args.compare:
         from analysis.comparison import run_comparison
         run_comparison(args.compare, args.events, ds=args.ds,
-                       show_plots=args.show_plots)
+                       show_plots=args.show_plots,
+                       track_layout=args.track_layout)
         return
 
     print()
     print("=" * 60)
     print("  OUR FS Laptime Simulation")
     print("=" * 60)
-    print(f"  Car config : {args.car}")
-    print(f"  Events     : {', '.join(args.events)}")
-    print(f"  Track ds   : {args.ds} m")
+    print(f"  Car config   : {args.car}")
+    print(f"  Events       : {', '.join(args.events)}")
+    print(f"  Track ds     : {args.ds} m")
+    print(f"  Track layout : {args.track_layout}  (sprint/endurance)")
     print()
 
     # --- Load car parameters ---
@@ -185,8 +201,8 @@ def main(argv: List[str] | None = None) -> None:
 
     if "sprint" in args.events:
         print("\n  [Sprint Event]")
-        segs  = load_track_from_yaml("config/track_sprint.yaml")
-        track = build_track(segs, ds=args.ds)
+        track = build_sprint_track(args.track_layout, ds=args.ds)
+        print(f"    Track layout : {args.track_layout}")
         print(f"    Track length : {track.total_length:.1f} m")
         t0     = time.perf_counter()
         result = SprintEvent(solver, track, bat).run()
@@ -197,8 +213,8 @@ def main(argv: List[str] | None = None) -> None:
 
     if "endurance" in args.events:
         print("\n  [Endurance Event]  (this may take a moment…)")
-        segs  = load_track_from_yaml("config/track_sprint.yaml")
-        track = build_track(segs, ds=args.ds)
+        track = build_sprint_track(args.track_layout, ds=args.ds)
+        print(f"    Track layout : {args.track_layout}")
         print(f"    Track length : {track.total_length:.1f} m/lap")
         t0     = time.perf_counter()
         result = EnduranceEvent(solver, track, bat).run()

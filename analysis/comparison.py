@@ -29,7 +29,12 @@ from sim.vehicle.powertrain import Powertrain
 from sim.vehicle.battery import BatteryModel
 from sim.ggv.ggv_builder import GGVBuilder
 from sim.solver.lap_solver import LapSolver
-from sim.track.track_builder import build_track, load_track_from_yaml
+from sim.track.track_builder import (
+    DEFAULT_SPRINT_LAYOUT,
+    build_sprint_track,
+    build_track,
+    load_track_from_yaml,
+)
 from sim.events.acceleration_event import AccelerationEvent
 from sim.events.skidpad_event import SkidpadEvent
 from sim.events.sprint_event import SprintEvent
@@ -491,6 +496,7 @@ def run_comparison(
     events: List[str],
     ds: float = 0.1,
     show_plots: bool = False,
+    track_layout: str = DEFAULT_SPRINT_LAYOUT,
 ) -> List[VariantResult]:
     """Run the full comparison pipeline."""
     # --- Load comparison config ---
@@ -518,15 +524,21 @@ def run_comparison(
     print(f"  Base config  : {base_yaml_path}")
     print(f"  Variants     : {len(variant_defs)}")
     print(f"  Events       : {', '.join(events)}")
+    print(f"  Track layout : {track_layout}  (sprint/endurance)")
     print()
 
     # --- Load tracks once (shared across all variants) ---
+    # Sprint and endurance share the same lap; the layout chooses its source.
     tracks = {}
+    sprint_track = None
     for ev in events:
-        track_yaml = _EVENT_TRACKS[ev]
-        if track_yaml not in tracks:
-            segs = load_track_from_yaml(track_yaml)
-            tracks[track_yaml] = build_track(segs, ds=ds)
+        if ev in ("sprint", "endurance"):
+            if sprint_track is None:
+                sprint_track = build_sprint_track(track_layout, ds=ds)
+            tracks[ev] = sprint_track
+        else:
+            segs = load_track_from_yaml(_EVENT_TRACKS[ev])
+            tracks[ev] = build_track(segs, ds=ds)
 
     # --- Run each variant ---
     variant_results: List[VariantResult] = []
@@ -565,8 +577,7 @@ def run_comparison(
         # Run events
         event_results: Dict[str, EventResult] = {}
         for ev in events:
-            track_yaml = _EVENT_TRACKS[ev]
-            track = tracks[track_yaml]
+            track = tracks[ev]
             print(f"    Running {ev}...", end=" ", flush=True)
             t0 = time.perf_counter()
             result = _run_event(ev, solver, track, bat)
