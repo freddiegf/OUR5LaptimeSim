@@ -4,9 +4,9 @@ plotter.py
 All matplotlib figure generation for event results.
 
 Plots per event:
-  Acceleration — 5-panel telemetry vs time (distance, velocity, accel, power, limiting factor)
+  Acceleration — 6-panel telemetry vs time (distance, velocity, accel, power, battery current, limiting factor)
   Skidpad      — no plots (time only)
-  Sprint       — 5-panel telemetry vs time + track speed map
+  Sprint       — 6-panel telemetry vs time + track speed map
   Endurance    — lap time bar chart + battery SOC & temperature vs laps
 """
 
@@ -51,17 +51,18 @@ def _safe_filename(event_name: str, suffix: str) -> str:
 # ---------------------------------------------------------------------------
 
 def plot_telemetry(result: EventResult, show: bool = False) -> plt.Figure:
-    """5-panel time-domain plot: distance, velocity, accel, power, limiting factor."""
+    """6-panel time-domain plot: distance, velocity, accel, power, battery current, limiting factor."""
     states = result.states
     t   = np.array([s.t for s in states])
     d   = np.array([s.s for s in states])
     v   = np.array([s.v for s in states]) * 3.6       # km/h
     a   = np.array([s.ax for s in states]) / 9.81     # g
     pwr = np.array([s.power_demand for s in states]) / 1000.0  # kW
+    i_b = np.array([s.battery_current for s in states])        # A
     lf  = [s.limiting_factor for s in states]
 
-    fig, axes = plt.subplots(5, 1, figsize=(11, 12), sharex=True,
-                             gridspec_kw={"height_ratios": [1, 1, 1, 1, 0.4]})
+    fig, axes = plt.subplots(6, 1, figsize=(11, 13), sharex=True,
+                             gridspec_kw={"height_ratios": [1, 1, 1, 1, 1, 0.4]})
 
     # Distance
     axes[0].plot(t, d, color="seagreen", linewidth=1.2)
@@ -85,8 +86,14 @@ def plot_telemetry(result: EventResult, show: bool = False) -> plt.Figure:
     axes[3].set_ylabel("Terminal Power (kW)")
     axes[3].grid(True, alpha=0.3)
 
+    # Battery current
+    axes[4].plot(t, i_b, color="purple", linewidth=1.0)
+    axes[4].axhline(0, color="k", linewidth=0.5)
+    axes[4].set_ylabel("Battery Current (A)")
+    axes[4].grid(True, alpha=0.3)
+
     # Limiting factor — colour strip
-    ax_lf = axes[4]
+    ax_lf = axes[5]
     for cat, colour in _LF_COLORS.items():
         mask = np.array([f == cat for f in lf])
         if mask.any():

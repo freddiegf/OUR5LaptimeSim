@@ -38,7 +38,7 @@ aero:
   Cl: 1             # downforce coefficient (absolute value used)
   Cd:  0.75             # drag coefficient
   area: 1.0            # reference area, m^2
-  cop_x: 1           # total aero CoP from front axle, m (1.0 = 62.5% rear / 37.5% front)
+  cop_x: -0.3           # total aero CoP from front axle, m (1.0 = 62.5% rear / 37.5% front)
   rho_air: 1.225       # kg/m^3
 
 # --- Powertrain ---
